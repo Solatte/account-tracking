@@ -7,24 +7,38 @@ import (
 	"log"
 
 	"github.com/gagliardetto/solana-go"
+	"github.com/iqbalbaharum/sol-stalker/internal/adapter"
 	"github.com/iqbalbaharum/sol-stalker/internal/types"
+	"github.com/iqbalbaharum/sol-stalker/internal/utils"
 )
 
 type TradeStorage struct {
-	client *sql.DB
+	client    *sql.DB
+	tableName string
 }
 
 func NewTradeStorage(db *sql.DB) *TradeStorage {
-	return &TradeStorage{client: db}
+	tName := adapter.TableName
+	return &TradeStorage{client: db, tableName: tName}
 }
 
 func (s *TradeStorage) SetTrade(trade *types.Trade) error {
-	query := `
-		INSERT INTO trade (amm_id, mint, action, compute_limit, compute_price, amount, signature, timestamp)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`
 
-	_, err := s.client.Exec(query, trade.AmmId.String(), trade.Mint.String(), trade.Action, trade.ComputeLimit, trade.ComputePrice, trade.Amount, trade.Signature, trade.Timestamp)
+	column := "("
+	value := " VALUES ("
+
+	for _, c := range adapter.Column {
+		column += fmt.Sprintf("%s,", c.Field)
+		value += "?,"
+	}
+
+	column = utils.ReplaceLastComma(column, ")")
+	value = utils.ReplaceLastComma(value, ")")
+
+	query := fmt.Sprintf(`INSERT INTO %s`, s.tableName) + column + value
+	unpacked := utils.UnpackStruct(trade)
+
+	_, err := s.client.Exec(query, unpacked...)
 	if err != nil {
 		log.Print(err)
 		return fmt.Errorf("failed to insert trade: %w", err)
@@ -33,11 +47,11 @@ func (s *TradeStorage) SetTrade(trade *types.Trade) error {
 }
 
 func (s *TradeStorage) GetTrade(ammId *solana.PublicKey) (*types.Trade, error) {
-	query := `
+	query := fmt.Sprintf(`
 		SELECT *
-		FROM trade
+		FROM %s 
 		WHERE ammId = ?
-	`
+	`, s.tableName)
 	row := s.client.QueryRow(query, ammId.String())
 
 	var trade types.Trade

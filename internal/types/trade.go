@@ -11,4 +11,6 @@ type Trade struct {
 	Amount       string
 	Signature    string
 	Timestamp    int64
+	Tip          string
+	TipAmount    int64
 }

@@ -25,3 +25,8 @@ type Compute struct {
 	Instruction uint8
 	Value       uint32
 }
+
+type Transfer struct {
+	Instruction uint32
+	Amount      int64
+}

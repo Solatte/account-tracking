@@ -55,5 +55,17 @@ func InitEnv() error {
 		return errors.New(fmt.Sprintf("Failed to initialize MySQL clients: %v", err))
 	}
 
+	err = adapter.CreateDatabaseAndTable()
+
+	if err != nil {
+		return errors.New(fmt.Sprintf("Failed to initialize database: %v", err))
+	}
+
+	err = adapter.CreateColumn()
+
+	if err != nil {
+		return errors.New(fmt.Sprintf("Failed to create column: %v", err))
+	}
+
 	return nil
 }

@@ -1,14 +1,18 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"log"
 	"math/big"
 	"runtime"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gagliardetto/solana-go"
+	"github.com/iqbalbaharum/sol-stalker/internal/adapter"
 	"github.com/iqbalbaharum/sol-stalker/internal/coder"
 	"github.com/iqbalbaharum/sol-stalker/internal/config"
 	"github.com/iqbalbaharum/sol-stalker/internal/generators"
@@ -19,7 +23,9 @@ import (
 )
 
 var (
-	client *pb.GeyserClient
+	client              *pb.GeyserClient
+	jitoTipAccounts     []string
+	bloxRouteTipAccount = "HWEoBxYs7ssKuudEjzjmpfJVX7Dvi7wescFsVx2L5yoY"
 )
 
 func main() {
@@ -40,6 +46,7 @@ func main() {
 	}
 
 	generators.GrpcConnect(config.GrpcAddr, config.InsecureConnection)
+	jitoTipAccounts = adapter.GetJitoTipAccounts()
 
 	txChannel := make(chan generators.GeyserResponse)
 
@@ -103,12 +110,20 @@ func main() {
 	}()
 }
 
+var tipAccount = []string{"jito", "bloxroute"}
+
 func processResponse(response generators.GeyserResponse) {
 	c := coder.NewRaydiumAmmInstructionCoder()
 
-	var computeLimit uint32
-	var computePrice uint32
-	// var tip uint32
+	var (
+		isProcess    bool
+		ix           generators.TxInstruction
+		res          generators.GeyserResponse
+		computeLimit uint32
+		computePrice uint32
+		tipAmount    int64
+		tip          string
+	)
 
 	for _, ins := range response.MempoolTxns.Instructions {
 		programId := response.MempoolTxns.AccountKeys[ins.ProgramIdIndex]
@@ -121,7 +136,9 @@ func processResponse(response generators.GeyserResponse) {
 
 			switch decodedIx.(type) {
 			case coder.SwapBaseIn:
-				processSwapBaseIn(ins, response, computeLimit, computePrice)
+				isProcess = true
+				ix = ins
+				res = response
 			case coder.SwapBaseOut:
 			default:
 				log.Println("Unknown instruction type")
@@ -144,9 +161,49 @@ func processResponse(response generators.GeyserResponse) {
 		}
 
 		if programId == config.TRANSFER_PROGRAM.String() {
-			log.Print(ins.Data)
-			log.Print(ins.Accounts)
+			transfer, err := c.DecodeTransfer(ins.Data)
+
+			if err != nil {
+				continue
+			}
+
+			var accounts []string
+
+			for _, idx := range ins.Accounts {
+				accountKeysLength := len(response.MempoolTxns.AccountKeys)
+
+				if idx >= uint8(accountKeysLength) {
+					accounts = append(accounts, response.MempoolTxns.AccountKeys[accountKeysLength-1])
+				} else {
+					accounts = append(accounts, response.MempoolTxns.AccountKeys[idx])
+
+				}
+			}
+
+			destination := accounts[1]
+
+			if destination == "" {
+				continue
+			}
+
+			isJitoTipAccount := slices.Contains(jitoTipAccounts, destination)
+			isBloxRouteTipAccount := strings.EqualFold(destination, bloxRouteTipAccount)
+
+			if isJitoTipAccount {
+				tip = tipAccount[0]
+				tipAmount = transfer.Amount
+				log.Printf("len AccountKeys: %s | %v | %d \n", response.MempoolTxns.Signature, tip, tipAmount)
+			} else if isBloxRouteTipAccount {
+				tip = tipAccount[1]
+				tipAmount = transfer.Amount
+				log.Printf("len AccountKeys: %s | %v | %d \n", response.MempoolTxns.Signature, tip, tipAmount)
+			}
 		}
+
+	}
+
+	if isProcess {
+		processSwapBaseIn(ix, res, computeLimit, computePrice, tip, tipAmount)
 	}
 }
 
@@ -182,7 +239,7 @@ func getPublicKeyFromTx(pos int, tx generators.MempoolTxn, instruction generator
 	return ammId, nil
 }
 
-func processSwapBaseIn(ins generators.TxInstruction, tx generators.GeyserResponse, computeLimit uint32, computePrice uint32) {
+func processSwapBaseIn(ins generators.TxInstruction, tx generators.GeyserResponse, computeLimit uint32, computePrice uint32, tip string, tipAmount int64) {
 	var ammId *solana.PublicKey
 
 	var err error
@@ -216,6 +273,10 @@ func processSwapBaseIn(ins generators.TxInstruction, tx generators.GeyserRespons
 		}
 	}
 
+	if tip == "" {
+		tip = sql.NullString{}.String
+	}
+
 	trade := &types.Trade{
 		AmmId:        ammId,
 		Mint:         &mint,
@@ -225,6 +286,8 @@ func processSwapBaseIn(ins generators.TxInstruction, tx generators.GeyserRespons
 		Amount:       preAmount.String(),
 		Signature:    tx.MempoolTxns.Signature,
 		Timestamp:    time.Now().Unix(),
+		Tip:          tip,
+		TipAmount:    tipAmount,
 	}
 
 	err = bot.SetTrade(trade)

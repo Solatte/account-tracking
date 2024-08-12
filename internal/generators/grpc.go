@@ -194,7 +194,7 @@ func GrpcSubscribeByAddresses(grpcToken string, accountInclude []string, account
 
 			var errorString string
 
-			if meta.Err != nil {
+			if meta.Err != nil && len(meta.Err.Err) >= 10 {
 				relevantByte := meta.Err.Err[9]
 				errorString = fmt.Sprintf("0x%x", relevantByte)
 			}
