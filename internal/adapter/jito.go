@@ -63,8 +63,5 @@ func GetJitoTipAccounts() []string {
 		return []string{}
 	}
 
-	fmt.Println("Response:", res)
-
 	return res.Result
-
 }

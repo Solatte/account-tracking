@@ -15,7 +15,7 @@ var (
 	mysqlClient *sql.DB
 	mySQLOnce   sync.Once
 	DbName      string = "sol_stalker"
-	TableName   string = "trade"
+	TableName   string = "trade3"
 )
 
 type column struct {
@@ -51,7 +51,6 @@ func CreateColumn() error {
 
 	// Get column names
 	cols, err := rows.Columns()
-	fmt.Printf("res: %v \n", cols)
 
 	if err != nil {
 		return fmt.Errorf(fmt.Sprintf("Failed to get columns: %v", err))
@@ -119,8 +118,6 @@ func InitMySQLClient(dsn string) error {
 	if dsn == "" {
 		return errors.New("MySQL DSN is empty")
 	}
-
-	fmt.Println(dsn)
 
 	var initError error
 	mySQLOnce.Do(func() {
