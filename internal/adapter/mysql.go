@@ -96,16 +96,15 @@ func CreateDatabaseAndTable() error {
 		return fmt.Errorf(fmt.Sprintf("Failed to use db %s: %v", DbName, err))
 	}
 
-	createTable := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-		amm_id TEXT, 
-		mint TEXT, 
-		action TEXT, 
-		compute_limit INT, 
-		compute_price INT,
-		amount BIGINT,
-		signature TEXT,
-		timestamp INT
-		);`, TableName)
+	createTable := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s `, TableName)
+	addColumn := "("
+
+	for _, col := range Column {
+		addColumn += fmt.Sprintf("%s %s, ", col.Field, col.Type)
+	}
+
+	addColumn = utils.ReplaceLastComma(addColumn, ");")
+	createTable += addColumn
 
 	_, err = mysqlClient.Exec(createTable)
 
