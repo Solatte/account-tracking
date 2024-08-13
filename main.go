@@ -63,43 +63,40 @@ func main() {
 		}()
 	}
 
-	var addrs []string = []string{
-		// "5niysgHXFoa8apmrgeBNRXJ6yPiz4WnMnVnAobUXoaMh",
-		"3mdactnpLLQV5Ly2JnBSXds5APk9qT4nAiMt4u13doNH",
-		"FENNES8B41Tw8SuiwqkV7T48g8Ar8F1pANgiZ4z67xzb",
-		"66ZC9U8y1uYaAxt4WFYVW11YZeZohvi8ev6wBHsAxykh",
-	}
-
+	var addrs []string = config.Addresses
 	log.Print("Tracking ", addrs)
 
 	var subscribeWg sync.WaitGroup
-	subscribeWg.Add(2)
+	subscribeWg.Add(len(addrs) * 2)
 
-	go func() {
-		defer subscribeWg.Done()
-		err := generators.GrpcSubscribeByAddresses(
-			config.GrpcToken,
-			addrs,
-			[]string{},
-			true,
-			txChannel)
-		if err != nil {
-			log.Printf("Error in first gRPC subscription: %v", err)
-		}
-	}()
+	for _, addr := range addrs {
+		go func(addrs []string) {
+			defer subscribeWg.Done()
+			err := generators.GrpcSubscribeByAddresses(
+				config.GrpcToken,
+				addrs,
+				[]string{},
+				true,
+				txChannel)
+			if err != nil {
+				log.Printf("Error in first gRPC subscription: %v", err)
+			}
+		}([]string{addr})
 
-	go func() {
-		defer subscribeWg.Done()
-		err := generators.GrpcSubscribeByAddresses(
-			config.GrpcToken,
-			addrs,
-			[]string{},
-			false,
-			txChannel)
-		if err != nil {
-			log.Printf("Error in second gRPC subscription: %v", err)
-		}
-	}()
+		go func(addrs []string) {
+			defer subscribeWg.Done()
+			err := generators.GrpcSubscribeByAddresses(
+				config.GrpcToken,
+				addrs,
+				[]string{},
+				false,
+				txChannel)
+			if err != nil {
+				log.Printf("Error in second gRPC subscription: %v", err)
+			}
+		}([]string{addr})
+
+	}
 
 	// Wait for both subscriptions to complete
 	subscribeWg.Wait()

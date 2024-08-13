@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/gagliardetto/solana-go"
 	"github.com/iqbalbaharum/sol-stalker/internal/adapter"
@@ -29,6 +30,7 @@ var (
 	RedisAddr          string
 	RedisPassword      string
 	MysqlDSN           string
+	Addresses          []string
 )
 
 func InitEnv() error {
@@ -44,6 +46,8 @@ func InitEnv() error {
 	RedisAddr = os.Getenv("REDIS_ADDR")
 	RedisPassword = os.Getenv("REDIS_PASSWORD")
 	MysqlDSN = os.Getenv("MYSQL_DSN")
+	var addresses = os.Getenv("ADDRESSES")
+	Addresses = strings.Split(addresses, ",")
 
 	err := adapter.InitRedisClients(RedisAddr, RedisPassword)
 	if err != nil {
