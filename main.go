@@ -64,7 +64,10 @@ func main() {
 	}
 
 	var addrs []string = []string{
-		"5niysgHXFoa8apmrgeBNRXJ6yPiz4WnMnVnAobUXoaMh",
+		// "5niysgHXFoa8apmrgeBNRXJ6yPiz4WnMnVnAobUXoaMh",
+		"3mdactnpLLQV5Ly2JnBSXds5APk9qT4nAiMt4u13doNH",
+		"FENNES8B41Tw8SuiwqkV7T48g8Ar8F1pANgiZ4z67xzb",
+		"66ZC9U8y1uYaAxt4WFYVW11YZeZohvi8ev6wBHsAxykh",
 	}
 
 	log.Print("Tracking ", addrs)
@@ -257,6 +260,22 @@ func processSwapBaseIn(ins generators.TxInstruction, tx generators.GeyserRespons
 		return
 	}
 
+	openbookId, err := getPublicKeyFromTx(7, tx.MempoolTxns, ins)
+
+	if err != nil {
+		return
+	}
+
+	var signerAccountIndex int
+
+	if openbookId.String() == config.OPENBOOK_ID.String() {
+		signerAccountIndex = 17
+	} else {
+		signerAccountIndex = 16
+	}
+
+	signerTokenAccount, _ := getPublicKeyFromTx(signerAccountIndex, tx.MempoolTxns, ins)
+
 	pKey, err := liquidity.GetPoolKeys(ammId)
 	if err != nil {
 		return
@@ -294,6 +313,7 @@ func processSwapBaseIn(ins generators.TxInstruction, tx generators.GeyserRespons
 		Tip:          tip,
 		TipAmount:    tipAmount,
 		Status:       status,
+		Signer:       signerTokenAccount.String(),
 	}
 
 	err = bot.SetTrade(trade)
