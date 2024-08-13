@@ -34,6 +34,7 @@ var Column = []column{
 	{Field: "timestamp", Type: "INT"},
 	{Field: "tip", Type: "TEXT"},
 	{Field: "tip_amount", Type: "INT"},
+	{Field: "status", Type: "TEXT"},
 }
 
 func CreateColumn() error {

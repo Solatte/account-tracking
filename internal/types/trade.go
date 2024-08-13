@@ -13,4 +13,5 @@ type Trade struct {
 	Timestamp    int64
 	Tip          string
 	TipAmount    int64
+	Status       string
 }

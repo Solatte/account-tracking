@@ -123,6 +123,7 @@ func processResponse(response generators.GeyserResponse) {
 		computePrice uint32
 		tipAmount    int64
 		tip          string
+		status       = "success"
 	)
 
 	for _, ins := range response.MempoolTxns.Instructions {
@@ -202,8 +203,12 @@ func processResponse(response generators.GeyserResponse) {
 
 	}
 
+	if response.MempoolTxns.Error != "" {
+		status = "failed"
+	}
+
 	if isProcess {
-		processSwapBaseIn(ix, res, computeLimit, computePrice, tip, tipAmount)
+		processSwapBaseIn(ix, res, computeLimit, computePrice, tip, tipAmount, status)
 	}
 }
 
@@ -239,7 +244,7 @@ func getPublicKeyFromTx(pos int, tx generators.MempoolTxn, instruction generator
 	return ammId, nil
 }
 
-func processSwapBaseIn(ins generators.TxInstruction, tx generators.GeyserResponse, computeLimit uint32, computePrice uint32, tip string, tipAmount int64) {
+func processSwapBaseIn(ins generators.TxInstruction, tx generators.GeyserResponse, computeLimit uint32, computePrice uint32, tip string, tipAmount int64, status string) {
 	var ammId *solana.PublicKey
 
 	var err error
@@ -288,6 +293,7 @@ func processSwapBaseIn(ins generators.TxInstruction, tx generators.GeyserRespons
 		Timestamp:    time.Now().Unix(),
 		Tip:          tip,
 		TipAmount:    tipAmount,
+		Status:       status,
 	}
 
 	err = bot.SetTrade(trade)
