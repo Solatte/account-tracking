@@ -63,40 +63,40 @@ func main() {
 		}()
 	}
 
-	var addrs []string = []string{
-		"5niysgHXFoa8apmrgeBNRXJ6yPiz4WnMnVnAobUXoaMh",
-	}
-
+	var addrs []string = config.Addresses
 	log.Print("Tracking ", addrs)
 
 	var subscribeWg sync.WaitGroup
-	subscribeWg.Add(2)
+	subscribeWg.Add(len(addrs) * 2)
 
-	go func() {
-		defer subscribeWg.Done()
-		err := generators.GrpcSubscribeByAddresses(
-			config.GrpcToken,
-			addrs,
-			[]string{},
-			true,
-			txChannel)
-		if err != nil {
-			log.Printf("Error in first gRPC subscription: %v", err)
-		}
-	}()
+	for _, addr := range addrs {
+		go func(addrs []string) {
+			defer subscribeWg.Done()
+			err := generators.GrpcSubscribeByAddresses(
+				config.GrpcToken,
+				addrs,
+				[]string{},
+				true,
+				txChannel)
+			if err != nil {
+				log.Printf("Error in first gRPC subscription: %v", err)
+			}
+		}([]string{addr})
 
-	go func() {
-		defer subscribeWg.Done()
-		err := generators.GrpcSubscribeByAddresses(
-			config.GrpcToken,
-			addrs,
-			[]string{},
-			false,
-			txChannel)
-		if err != nil {
-			log.Printf("Error in second gRPC subscription: %v", err)
-		}
-	}()
+		go func(addrs []string) {
+			defer subscribeWg.Done()
+			err := generators.GrpcSubscribeByAddresses(
+				config.GrpcToken,
+				addrs,
+				[]string{},
+				false,
+				txChannel)
+			if err != nil {
+				log.Printf("Error in second gRPC subscription: %v", err)
+			}
+		}([]string{addr})
+
+	}
 
 	// Wait for both subscriptions to complete
 	subscribeWg.Wait()
@@ -257,6 +257,22 @@ func processSwapBaseIn(ins generators.TxInstruction, tx generators.GeyserRespons
 		return
 	}
 
+	openbookId, err := getPublicKeyFromTx(7, tx.MempoolTxns, ins)
+
+	if err != nil {
+		return
+	}
+
+	var signerAccountIndex int
+
+	if openbookId.String() == config.OPENBOOK_ID.String() {
+		signerAccountIndex = 17
+	} else {
+		signerAccountIndex = 16
+	}
+
+	signerTokenAccount, _ := getPublicKeyFromTx(signerAccountIndex, tx.MempoolTxns, ins)
+
 	pKey, err := liquidity.GetPoolKeys(ammId)
 	if err != nil {
 		return
@@ -294,6 +310,7 @@ func processSwapBaseIn(ins generators.TxInstruction, tx generators.GeyserRespons
 		Tip:          tip,
 		TipAmount:    tipAmount,
 		Status:       status,
+		Signer:       signerTokenAccount.String(),
 	}
 
 	err = bot.SetTrade(trade)

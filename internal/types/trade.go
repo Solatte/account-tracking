@@ -14,4 +14,5 @@ type Trade struct {
 	Tip          string
 	TipAmount    int64
 	Status       string
+	Signer       string
 }
