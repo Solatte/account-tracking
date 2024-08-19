@@ -15,7 +15,7 @@ var (
 	mysqlClient *sql.DB
 	mySQLOnce   sync.Once
 	DbName      string = "sol_stalker"
-	TableName   string = "trade3"
+	TableName   string = "trade"
 )
 
 type column struct {

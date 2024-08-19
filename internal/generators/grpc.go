@@ -118,7 +118,7 @@ func GrpcSubscribeByAddresses(grpcToken string, accountInclude []string, account
 		return errors.New("GRPC not connected")
 	}
 
-	defer close(txChannel)
+	// defer close(txChannel)
 
 	var subscription pb.SubscribeRequest = pb.SubscribeRequest{
 		Slots:        make(map[string]*pb.SubscribeRequestFilterSlots),
@@ -175,47 +175,64 @@ func GrpcSubscribeByAddresses(grpcToken string, accountInclude []string, account
 		return err
 	}
 
+	key := "success"
+
+	if failed {
+		key = "failed"
+	}
+
+	TxSubscriptionManager[key].Add(accountInclude[0], stream, failed)
+
 	for {
-		resp, _ := stream.Recv()
+		select {
+		case <-stream.Context().Done():
+			return nil
+		case <-TxSubscriptionManager[key].Subscriptions[accountInclude[0]].Done:
+			stream.CloseSend()
+			return nil
+		default:
+			resp, _ := stream.Recv()
 
-		if err == io.EOF {
-			// return
-		}
-
-		if err != nil {
-			log.Printf("Error occurred in receiving update: %v", err)
-			break
-		}
-
-		if resp.GetTransaction() != nil {
-
-			message := resp.GetTransaction().Transaction.Transaction.Message
-			meta := resp.GetTransaction().Transaction.Meta
-
-			var errorString string
-
-			if meta.Err != nil && len(meta.Err.Err) >= 10 {
-				relevantByte := meta.Err.Err[9]
-				errorString = fmt.Sprintf("0x%x", relevantByte)
+			if err == io.EOF {
+				// return
 			}
 
-			response := &GeyserResponse{
-				MempoolTxns: MempoolTxn{
-					Source:               "grpc",
-					Signature:            base58.Encode(resp.GetTransaction().Transaction.Signature),
-					AccountKeys:          convertAccountKeys(message.AccountKeys),
-					RecentBlockhash:      base58.Encode(message.RecentBlockhash),
-					Instructions:         convertInstructions(message.Instructions),
-					AddressTableLookups:  convertAddressTableLookups(message.AddressTableLookups),
-					PreTokenBalances:     convertTokenBalances(meta.PreTokenBalances),
-					PostTokenBalances:    convertTokenBalances(meta.PostTokenBalances),
-					ComputeUnitsConsumed: *resp.GetTransaction().Transaction.GetMeta().ComputeUnitsConsumed,
-					Slot:                 resp.GetTransaction().Slot,
-					Error:                errorString,
-				},
+			if err != nil {
+				log.Printf("Error occurred in receiving update: %v", err)
+				break
 			}
 
-			txChannel <- *response
+			if resp.GetTransaction() != nil {
+
+				message := resp.GetTransaction().Transaction.Transaction.Message
+				meta := resp.GetTransaction().Transaction.Meta
+
+				var errorString string
+
+				if meta.Err != nil && len(meta.Err.Err) >= 10 {
+					relevantByte := meta.Err.Err[9]
+					errorString = fmt.Sprintf("0x%x", relevantByte)
+				}
+
+				response := &GeyserResponse{
+					MempoolTxns: MempoolTxn{
+						Source:               "grpc",
+						Signature:            base58.Encode(resp.GetTransaction().Transaction.Signature),
+						AccountKeys:          convertAccountKeys(message.AccountKeys),
+						RecentBlockhash:      base58.Encode(message.RecentBlockhash),
+						Instructions:         convertInstructions(message.Instructions),
+						AddressTableLookups:  convertAddressTableLookups(message.AddressTableLookups),
+						PreTokenBalances:     convertTokenBalances(meta.PreTokenBalances),
+						PostTokenBalances:    convertTokenBalances(meta.PostTokenBalances),
+						ComputeUnitsConsumed: *resp.GetTransaction().Transaction.GetMeta().ComputeUnitsConsumed,
+						Slot:                 resp.GetTransaction().Slot,
+						Error:                errorString,
+					},
+				}
+
+				txChannel <- *response
+
+			}
 		}
 	}
 
@@ -289,4 +306,13 @@ func GetBlockhash() (solana.Hash, error) {
 	}
 
 	return hash, nil
+}
+
+var TxSubscriptionManager map[string]*SubscriptionManager
+
+func init() {
+
+	TxSubscriptionManager = make(map[string]*SubscriptionManager)
+	TxSubscriptionManager["success"] = NewSubscriptionManager()
+	TxSubscriptionManager["failed"] = NewSubscriptionManager()
 }

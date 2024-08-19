@@ -1,15 +1,36 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"net/http"
 	"runtime"
 	"sync"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/iqbalbaharum/sol-stalker/external/api/concurrency"
+	"github.com/iqbalbaharum/sol-stalker/external/api/database"
+	"github.com/iqbalbaharum/sol-stalker/external/api/handler"
 	"github.com/iqbalbaharum/sol-stalker/internal/adapter"
 	"github.com/iqbalbaharum/sol-stalker/internal/config"
 	"github.com/iqbalbaharum/sol-stalker/internal/generators"
 	bot "github.com/iqbalbaharum/sol-stalker/internal/library"
+)
+
+type Server struct {
+	Router *chi.Mux
+}
+
+func CreateServer() *Server {
+	server := &Server{
+		Router: handler.CreateRoutes(),
+	}
+
+	return server
+}
+
+const (
+	PORT = 5000
 )
 
 func main() {
@@ -29,11 +50,6 @@ func main() {
 		return
 	}
 
-	generators.GrpcConnect(config.GrpcAddr, config.InsecureConnection)
-	bot.JitoTipAccounts = adapter.GetJitoTipAccounts()
-
-	txChannel := make(chan generators.GeyserResponse)
-
 	var wg sync.WaitGroup
 
 	// Create a worker pool
@@ -41,49 +57,25 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for response := range txChannel {
+			for response := range concurrency.TxChannel {
 				bot.ProcessResponse(response)
 			}
 		}()
 	}
 
-	var addrs []string = config.Addresses
-	log.Print("Tracking ", addrs)
+	bot.JitoTipAccounts = adapter.GetJitoTipAccounts()
+	generators.GrpcConnect(config.GrpcAddr, config.InsecureConnection)
 
-	for _, addr := range addrs {
-		concurrency.SubscribeWg.Add(2)
-		go func(addrs []string) {
-			defer concurrency.SubscribeWg.Done()
-			err := generators.GrpcSubscribeByAddresses(
-				config.GrpcToken,
-				addrs,
-				[]string{},
-				true,
-				txChannel)
-			if err != nil {
-				log.Printf("Error in first gRPC subscription: %v", err)
-			}
-		}([]string{addr})
-
-		go func(addrs []string) {
-			defer concurrency.SubscribeWg.Done()
-			err := generators.GrpcSubscribeByAddresses(
-				config.GrpcToken,
-				addrs,
-				[]string{},
-				false,
-				txChannel)
-			if err != nil {
-				log.Printf("Error in second gRPC subscription: %v", err)
-			}
-		}([]string{addr})
-
-	}
+	_ = database.InitMySQLClient(config.MysqlDSN)
 
 	// Wait for both subscriptions to complete
 	concurrency.SubscribeWg.Wait()
 
-	wg.Wait()
+	server := CreateServer()
+	port := fmt.Sprintf(":%d", PORT)
+	fmt.Printf("server running on port%s \n", port)
+
+	http.ListenAndServe(port, server.Router)
 
 	defer func() {
 		if err := generators.CloseConnection(); err != nil {
