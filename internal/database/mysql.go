@@ -67,7 +67,14 @@ func CreateDatabaseAndTable() error {
 		return fmt.Errorf(fmt.Sprintf("Failed to use db %s: %v", DbName, err))
 	}
 
-	path := "./external/api/database/migrations/"
+	wd, err := os.Getwd()
+
+	if err != nil {
+		panic(err)
+	}
+
+	path := wd + "/internal/database/migrations/"
+	fmt.Println(path)
 
 	entries, err := os.ReadDir(path)
 

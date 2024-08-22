@@ -6,9 +6,9 @@ import (
 	"sync"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/iqbalbaharum/sol-stalker/external/api/concurrency"
-	"github.com/iqbalbaharum/sol-stalker/external/api/database"
+	"github.com/iqbalbaharum/sol-stalker/internal/concurrency"
 	"github.com/iqbalbaharum/sol-stalker/internal/config"
+	"github.com/iqbalbaharum/sol-stalker/internal/database"
 	"github.com/iqbalbaharum/sol-stalker/internal/generators"
 	"github.com/iqbalbaharum/sol-stalker/internal/utils"
 )

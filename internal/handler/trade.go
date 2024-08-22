@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/iqbalbaharum/sol-stalker/external/api/database"
+	"github.com/iqbalbaharum/sol-stalker/internal/database"
 	"github.com/iqbalbaharum/sol-stalker/internal/utils"
 )
 
