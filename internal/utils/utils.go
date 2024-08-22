@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -60,4 +61,24 @@ func UnpackStruct(s interface{}) []interface{} {
 	}
 
 	return result
+}
+
+func BuildInsertQuery(i any) string {
+	column := "("
+	values := " VALUES ("
+	typ := reflect.TypeOf(i).Elem()
+
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		jsonTag := field.Tag.Get("json")
+
+		column += fmt.Sprintf("%s,", jsonTag)
+		values += "?,"
+
+	}
+
+	column = ReplaceLastComma(column, ")")
+	values = ReplaceLastComma(values, ")")
+
+	return column + values
 }

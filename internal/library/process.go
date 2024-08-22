@@ -79,6 +79,7 @@ func ProcessSwapBaseIn(ins generators.TxInstruction, tx generators.GeyserRespons
 	signerTokenAccount, _ := getPublicKeyFromTx(signerAccountIndex, tx.MempoolTxns, ins)
 
 	pKey, err := liquidity.GetPoolKeys(ammId)
+
 	if err != nil {
 		return
 	}
@@ -123,13 +124,12 @@ func ProcessSwapBaseIn(ins generators.TxInstruction, tx generators.GeyserRespons
 		log.Print(err)
 	}
 
-	log.Printf("%s | %s | %s | %d | %d | %d", ammId, tx.MempoolTxns.Signature, action, computeLimit, computePrice, amount)
+	log.Printf("%s | %s | %s | %d | %d | %d | %s", ammId, tx.MempoolTxns.Signature, action, computeLimit, computePrice, amount, tip)
 }
 
 var (
-	JitoTipAccounts     []string
-	bloxRouteTipAccount = "HWEoBxYs7ssKuudEjzjmpfJVX7Dvi7wescFsVx2L5yoY"
-	tipAccount          = []string{"jito", "bloxroute"}
+	JitoTipAccounts []string
+	tipAccount      = []string{"jito", "bloxroute"}
 )
 
 func ProcessResponse(response generators.GeyserResponse) {
@@ -208,16 +208,14 @@ func ProcessResponse(response generators.GeyserResponse) {
 			}
 
 			isJitoTipAccount := slices.Contains(JitoTipAccounts, destination)
-			isBloxRouteTipAccount := strings.EqualFold(destination, bloxRouteTipAccount)
+			isBloxRouteTipAccount := strings.EqualFold(destination, config.BLOXROUTE_TIP.String())
 
 			if isJitoTipAccount {
 				tip = tipAccount[0]
 				tipAmount = transfer.Amount
-				log.Printf("len AccountKeys: %s | %v | %d \n", response.MempoolTxns.Signature, tip, tipAmount)
 			} else if isBloxRouteTipAccount {
 				tip = tipAccount[1]
 				tipAmount = transfer.Amount
-				log.Printf("len AccountKeys: %s | %v | %d \n", response.MempoolTxns.Signature, tip, tipAmount)
 			}
 		}
 

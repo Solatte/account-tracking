@@ -1,5 +1,6 @@
 package types
 
 type Listener struct {
-	Signer string
+	Signer       string `json:"signer"`
+	IncludeError bool   `json:"include_error"`
 }

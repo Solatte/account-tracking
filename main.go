@@ -11,10 +11,10 @@ import (
 	"github.com/iqbalbaharum/sol-stalker/internal/adapter"
 	"github.com/iqbalbaharum/sol-stalker/internal/concurrency"
 	"github.com/iqbalbaharum/sol-stalker/internal/config"
-	"github.com/iqbalbaharum/sol-stalker/internal/database"
-	"github.com/iqbalbaharum/sol-stalker/internal/generators"
 	"github.com/iqbalbaharum/sol-stalker/internal/handler"
 	bot "github.com/iqbalbaharum/sol-stalker/internal/library"
+	"github.com/iqbalbaharum/sol-stalker/internal/storage"
+	"github.com/iqbalbaharum/sol-stalker/internal/types"
 )
 
 type Server struct {
@@ -31,6 +31,10 @@ func CreateServer() *Server {
 
 const (
 	PORT = 5000
+)
+
+var (
+	wg sync.WaitGroup
 )
 
 func main() {
@@ -50,8 +54,6 @@ func main() {
 		return
 	}
 
-	var wg sync.WaitGroup
-
 	// Create a worker pool
 	for i := 0; i < numCPU; i++ {
 		wg.Add(1)
@@ -64,11 +66,29 @@ func main() {
 	}
 
 	bot.JitoTipAccounts = adapter.GetJitoTipAccounts()
-	generators.GrpcConnect(config.GrpcAddr, config.InsecureConnection)
 
-	_ = database.InitMySQLClient(config.MysqlDSN)
+	err = adapter.InitGrpcsClients([]types.GrpcConfig{
+		config.GRPC1,
+		config.GRPC2,
+	})
 
-	// Wait for both subscriptions to complete
+	if err != nil {
+		panic(err)
+	}
+
+	err = adapter.InitMySQLClient(config.MySqlDsn)
+
+	if err != nil {
+		panic(err)
+	}
+
+	client, err := adapter.GetMySQLClient()
+
+	if err != nil {
+		panic(err)
+	}
+
+	storage.Init(client)
 	concurrency.SubscribeWg.Wait()
 
 	server := CreateServer()
@@ -77,9 +97,5 @@ func main() {
 
 	http.ListenAndServe(port, server.Router)
 
-	defer func() {
-		if err := generators.CloseConnection(); err != nil {
-			log.Printf("Error closing gRPC connection: %v", err)
-		}
-	}()
+	defer func() { adapter.CloseGrpcsConnection() }()
 }

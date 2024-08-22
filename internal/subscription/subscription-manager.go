@@ -1,9 +1,14 @@
-package generators
+package sub
 
 import (
 	"sync"
 
 	pb "github.com/rpcpool/yellowstone-grpc/examples/golang/proto"
+)
+
+const (
+	SUCCESS = "success"
+	FAILED  = "failed"
 )
 
 type Subscription struct {
@@ -40,4 +45,13 @@ func (sm *SubscriptionManager) Remove(id string) {
 		close(sub.Done)
 	}
 
+}
+
+var TxManager map[string]*SubscriptionManager
+
+func init() {
+
+	TxManager = make(map[string]*SubscriptionManager)
+	TxManager["success"] = NewSubscriptionManager()
+	TxManager["failed"] = NewSubscriptionManager()
 }

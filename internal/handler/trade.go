@@ -3,12 +3,20 @@ package handler
 import (
 	"net/http"
 
-	"github.com/iqbalbaharum/sol-stalker/internal/database"
+	"github.com/iqbalbaharum/sol-stalker/internal/storage"
+	"github.com/iqbalbaharum/sol-stalker/internal/types"
 	"github.com/iqbalbaharum/sol-stalker/internal/utils"
 )
 
-func GetTrade(w http.ResponseWriter, r *http.Request) {
-	decoded, err := utils.Decode[database.MySQLFilter](r)
+type tradeHandler struct {
+}
+
+func NewTradeHandler() *tradeHandler {
+	return &tradeHandler{}
+}
+
+func (h *tradeHandler) Get(w http.ResponseWriter, r *http.Request) {
+	decoded, err := utils.Decode[types.MySQLFilter](r)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -16,7 +24,7 @@ func GetTrade(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	trades, err := database.SearchTrade(ctx, decoded)
+	trades, err := storage.Trade.Search(decoded)
 
 	if err != nil {
 		select {
@@ -31,9 +39,9 @@ func GetTrade(w http.ResponseWriter, r *http.Request) {
 	utils.Encode(w, r, http.StatusOK, trades)
 }
 
-func DeleteAllTrade(w http.ResponseWriter, r *http.Request) {
+func (h *tradeHandler) DeleteAll(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	err := database.DeleteTrade(ctx)
+	err := storage.Trade.DeleteAll()
 
 	if err != nil {
 		select {

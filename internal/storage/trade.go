@@ -2,40 +2,28 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 
 	"github.com/gagliardetto/solana-go"
-	"github.com/iqbalbaharum/sol-stalker/internal/adapter"
 	"github.com/iqbalbaharum/sol-stalker/internal/types"
 	"github.com/iqbalbaharum/sol-stalker/internal/utils"
 )
 
-type TradeStorage struct {
-	client    *sql.DB
-	tableName string
+type tradeStorage struct {
+	client *sql.DB
 }
 
-func NewTradeStorage(db *sql.DB) *TradeStorage {
-	tName := adapter.TableName
-	return &TradeStorage{client: db, tableName: tName}
+func NewTradeStorage(client *sql.DB) *tradeStorage {
+	return &tradeStorage{client: client}
 }
 
-func (s *TradeStorage) SetTrade(trade *types.Trade) error {
+func (s *tradeStorage) Set(trade *types.Trade) error {
+	columns := utils.BuildInsertQuery(trade)
 
-	column := "("
-	value := " VALUES ("
-
-	for _, c := range adapter.Column {
-		column += fmt.Sprintf("%s,", c.Field)
-		value += "?,"
-	}
-
-	column = utils.ReplaceLastComma(column, ")")
-	value = utils.ReplaceLastComma(value, ")")
-
-	query := fmt.Sprintf(`INSERT INTO %s`, s.tableName) + column + value
+	query := fmt.Sprintf(`INSERT INTO %s`, TABLE_NAME_TRADE) + columns
 	unpacked := utils.UnpackStruct(trade)
 
 	_, err := s.client.Exec(query, unpacked...)
@@ -46,32 +34,146 @@ func (s *TradeStorage) SetTrade(trade *types.Trade) error {
 	return nil
 }
 
-func (s *TradeStorage) GetTrade(ammId *solana.PublicKey) (*types.Trade, error) {
-	query := fmt.Sprintf(`
-		SELECT *
-		FROM %s 
-		WHERE ammId = ?
-	`, s.tableName)
-	row := s.client.QueryRow(query, ammId.String())
+func (s *tradeStorage) Search(filter types.MySQLFilter) ([]*types.Trade, error) {
+	ctx := context.Background()
 
-	var trade types.Trade
+	query := fmt.Sprintf(`SELECT * FROM %s`, TABLE_NAME_TRADE)
+	var values []any
+
+	for idx, q := range filter.Query {
+		if idx == 0 {
+			query += " WHERE "
+		}
+
+		query += fmt.Sprintf("%s %s ?", q.Column, q.Op)
+		values = append(values, q.Query)
+
+		if idx < len(filter.Query)-1 {
+			query += " AND "
+		} else {
+			query += ";"
+		}
+	}
+
+	stmt, err := s.client.PrepareContext(ctx, query)
+
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", ErrPrepareStatement, err)
+	}
+
+	defer stmt.Close()
+
+	rows, err := s.client.QueryContext(ctx, query, values...)
+
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", ErrExecuteQuery, err)
+	}
+
+	defer rows.Close()
+
+	var trades []*types.Trade
+
+	var ammId string
 	var mint string
 
-	err := row.Scan(&ammId, &mint, &trade.Action, &trade.ComputeLimit, &trade.ComputePrice, &trade.Amount, &trade.Signature, &trade.Timestamp)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil // No trade found
+	for rows.Next() {
+		var t types.Trade
+
+		err = rows.Scan(
+			&ammId,
+			&mint,
+			&t.Action,
+			&t.ComputeLimit,
+			&t.ComputePrice,
+			&t.Amount,
+			&t.Signature,
+			&t.Timestamp,
+			&t.Tip,
+			&t.TipAmount,
+			&t.Status,
+			&t.Signer,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", ErrScanData, err)
 		}
-		return nil, fmt.Errorf("failed to retrieve trade: %w", err)
+
+		ammIdPk, err := solana.PublicKeyFromBase58(ammId)
+
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", ErrScanData, err)
+		}
+
+		mintPk, err := solana.PublicKeyFromBase58(mint)
+
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", ErrScanData, err)
+		}
+
+		t.AmmId = &ammIdPk
+		t.Mint = &mintPk
+
+		trades = append(trades, &t)
 	}
 
-	trade.AmmId = ammId
+	return trades, nil
+}
 
-	mintPubKey, err := solana.PublicKeyFromBase58(mint)
+func (s *tradeStorage) List() ([]*types.Trade, error) {
+	ctx := context.Background()
+
+	stmt, err := s.client.PrepareContext(ctx, `SELECT * FROM `+TABLE_NAME_TRADE)
+
 	if err != nil {
-		return nil, fmt.Errorf("invalid mint: %w", err)
+		return nil, fmt.Errorf("%s: %w", ErrPrepareStatement, err)
 	}
-	trade.Mint = &mintPubKey
 
-	return &trade, nil
+	defer stmt.Close()
+
+	rows, err := stmt.QueryContext(ctx)
+
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", ErrExecuteQuery, err)
+	}
+
+	defer rows.Close()
+
+	var trades []*types.Trade
+
+	for rows.Next() {
+		var l types.Trade
+
+		err = rows.Scan(&l.Signer)
+
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", ErrScanData, err)
+		}
+
+		trades = append(trades, &l)
+	}
+
+	if len(trades) == 0 {
+		return nil, ErrTradeNotFound
+	}
+
+	return trades, nil
+}
+
+func (s *tradeStorage) DeleteAll() error {
+	ctx := context.Background()
+	stmt, err := s.client.PrepareContext(ctx, `TRUNCATE `+TABLE_NAME_TRADE)
+
+	if err != nil {
+		return fmt.Errorf("%s: %w", ErrPrepareStatement, err)
+	}
+
+	defer stmt.Close()
+
+	_, err = stmt.ExecContext(ctx)
+
+	if err != nil {
+		return fmt.Errorf("%s: %w", ErrExecuteStatement, err)
+	}
+
+	return nil
 }

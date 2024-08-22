@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gagliardetto/solana-go"
+	sub "github.com/iqbalbaharum/sol-stalker/internal/subscription"
 	"github.com/iqbalbaharum/sol-stalker/internal/types"
 	"github.com/iqbalbaharum/sol-stalker/internal/utils"
 	"github.com/mr-tron/base58"
@@ -76,12 +77,13 @@ type GeyserResponse struct {
 	MempoolTxns MempoolTxn `json:"mempoolTxns"`
 }
 
-var (
+type GrpcClient struct {
 	conn   *grpc.ClientConn
 	client pb.GeyserClient
-)
+	token  string
+}
 
-func GrpcConnect(address string, plaintext bool) {
+func GrpcConnect(address string, token string, plaintext bool) (*GrpcClient, error) {
 	var opts []grpc.DialOption
 	if plaintext {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -98,23 +100,24 @@ func GrpcConnect(address string, plaintext bool) {
 
 	log.Println("Starting grpc client, connecting to", address)
 	var err error
-	conn, err = grpc.NewClient(address, opts...)
+	conn, err := grpc.NewClient(address, opts...)
 	if err != nil {
-		log.Fatalf("fail to dial: %v", err)
+		return nil, err
 	}
 
-	client = pb.NewGeyserClient(conn)
+	client := pb.NewGeyserClient(conn)
+	return &GrpcClient{conn, client, token}, nil
 }
 
-func CloseConnection() error {
-	if conn != nil {
-		return conn.Close()
+func (g *GrpcClient) CloseConnection() error {
+	if g.conn != nil {
+		return g.conn.Close()
 	}
 	return nil
 }
 
-func GrpcSubscribeByAddresses(grpcToken string, accountInclude []string, accountExclude []string, failed bool, txChannel chan<- GeyserResponse) error {
-	if client == nil {
+func (g *GrpcClient) GrpcSubscribeByAddresses(sourceName string, accountInclude []string, accountExclude []string, failed bool, txChannel chan<- GeyserResponse) error {
+	if g.client == nil {
 		return errors.New("GRPC not connected")
 	}
 
@@ -155,12 +158,13 @@ func GrpcSubscribeByAddresses(grpcToken string, accountInclude []string, account
 
 	// Set up the subscription request
 	ctx := context.Background()
-	if grpcToken != "" {
-		md := metadata.New(map[string]string{"x-token": grpcToken})
+
+	if g.token != "" {
+		md := metadata.New(map[string]string{"x-token": g.token})
 		ctx = metadata.NewOutgoingContext(ctx, md)
 	}
 
-	stream, err := client.Subscribe(ctx,
+	stream, err := g.client.Subscribe(ctx,
 		grpc.MaxCallRecvMsgSize(100<<20),
 	)
 
@@ -175,19 +179,19 @@ func GrpcSubscribeByAddresses(grpcToken string, accountInclude []string, account
 		return err
 	}
 
-	key := "success"
+	key := sub.SUCCESS
 
 	if failed {
-		key = "failed"
+		key = sub.FAILED
 	}
 
-	TxSubscriptionManager[key].Add(accountInclude[0], stream, failed)
+	sub.TxManager[key].Add(accountInclude[0], stream, failed)
 
 	for {
 		select {
 		case <-stream.Context().Done():
 			return nil
-		case <-TxSubscriptionManager[key].Subscriptions[accountInclude[0]].Done:
+		case <-sub.TxManager[key].Subscriptions[accountInclude[0]].Done:
 			stream.CloseSend()
 			return nil
 		default:
@@ -209,14 +213,18 @@ func GrpcSubscribeByAddresses(grpcToken string, accountInclude []string, account
 
 				var errorString string
 
-				if meta.Err != nil && len(meta.Err.Err) >= 10 {
-					relevantByte := meta.Err.Err[9]
-					errorString = fmt.Sprintf("0x%x", relevantByte)
+				if meta.Err != nil {
+					if len(meta.Err.Err) > 9 {
+						relevantByte := meta.Err.Err[9]
+						errorString = fmt.Sprintf("0x%x", relevantByte)
+					} else {
+						errorString = "ERR"
+					}
 				}
 
 				response := &GeyserResponse{
 					MempoolTxns: MempoolTxn{
-						Source:               "grpc",
+						Source:               sourceName,
 						Signature:            base58.Encode(resp.GetTransaction().Transaction.Signature),
 						AccountKeys:          convertAccountKeys(message.AccountKeys),
 						RecentBlockhash:      base58.Encode(message.RecentBlockhash),
@@ -231,14 +239,10 @@ func GrpcSubscribeByAddresses(grpcToken string, accountInclude []string, account
 				}
 
 				txChannel <- *response
-
 			}
 		}
 	}
-
-	return nil
 }
-
 func convertAccountKeys(accountKeys [][]byte) []string {
 	encodedKeys := make([]string, len(accountKeys))
 	for i, key := range accountKeys {
@@ -284,17 +288,16 @@ func convertTokenBalances(tokenBalances []*pb.TokenBalance) []types.TxTokenBalan
 	return convertedBalances
 }
 
-func GetBlockhash() (solana.Hash, error) {
-	if client == nil {
+func (g *GrpcClient) GetBlockhash() (solana.Hash, error) {
+	if g.client == nil {
 		return solana.Hash{}, errors.New("GRPC not connected")
 	}
 
 	ctx := context.Background()
-	block, err := client.GetLatestBlockhash(ctx, &pb.GetLatestBlockhashRequest{
+
+	block, err := g.client.GetLatestBlockhash(ctx, &pb.GetLatestBlockhashRequest{
 		Commitment: pb.CommitmentLevel_CONFIRMED.Enum(),
 	})
-
-	log.Print(err)
 
 	if err != nil {
 		return solana.Hash{}, err
@@ -306,13 +309,4 @@ func GetBlockhash() (solana.Hash, error) {
 	}
 
 	return hash, nil
-}
-
-var TxSubscriptionManager map[string]*SubscriptionManager
-
-func init() {
-
-	TxSubscriptionManager = make(map[string]*SubscriptionManager)
-	TxSubscriptionManager["success"] = NewSubscriptionManager()
-	TxSubscriptionManager["failed"] = NewSubscriptionManager()
 }
