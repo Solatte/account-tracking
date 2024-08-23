@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"sync"
@@ -141,5 +142,17 @@ func (h *listenerHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+}
+
+func (h *listenerHandler) Init() {
+	listeners, err := storage.Listener.GetAll()
+
+	if err != nil {
+		fmt.Printf("total registered listener: %d\n", len(listeners))
+	}
+
+	for _, listener := range listeners {
+		h.ListenFor(listener.Signer, concurrency.TxChannel, &concurrency.SubscribeWg)
 	}
 }

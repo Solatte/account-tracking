@@ -23,8 +23,6 @@ func InitMySQLClient(dsn string) error {
 
 	var initError error
 
-	var client *sql.DB
-	var err error
 	mySQLOnce.Do(func() {
 		client, err := sql.Open("mysql", dsn)
 		if err != nil {
@@ -37,19 +35,19 @@ func InitMySQLClient(dsn string) error {
 			return
 		}
 
+		database, err := db.NewDatabase(client, config.MySqlDbName)
+		if err != nil {
+			initError = err
+		}
+
+		err = database.CreateDatabaseAndTable()
+		if err != nil {
+			initError = err
+		}
+
+		Database = database
+
 	})
-
-	database, err := db.NewDatabase(client, config.MySqlDbName)
-	if err != nil {
-		return err
-	}
-
-	err = database.CreateDatabaseAndTable()
-	if err != nil {
-		return err
-	}
-
-	Database = database
 
 	return initError
 }

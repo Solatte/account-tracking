@@ -37,24 +37,7 @@ func (s *tradeStorage) Set(trade *types.Trade) error {
 func (s *tradeStorage) Search(filter types.MySQLFilter) ([]*types.Trade, error) {
 	ctx := context.Background()
 
-	query := fmt.Sprintf(`SELECT * FROM %s`, TABLE_NAME_TRADE)
-	var values []any
-
-	for idx, q := range filter.Query {
-		if idx == 0 {
-			query += " WHERE "
-		}
-
-		query += fmt.Sprintf("%s %s ?", q.Column, q.Op)
-		values = append(values, q.Query)
-
-		if idx < len(filter.Query)-1 {
-			query += " AND "
-		} else {
-			query += ";"
-		}
-	}
-
+	query, values := utils.BuildSearchQuery(TABLE_NAME_TRADE, filter)
 	stmt, err := s.client.PrepareContext(ctx, query)
 
 	if err != nil {

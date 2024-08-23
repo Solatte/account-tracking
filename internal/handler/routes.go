@@ -12,6 +12,8 @@ func CreateRoutes() *chi.Mux {
 	var TradeHandler = NewTradeHandler()
 	var ListenerHandler = NewListenerHandler()
 
+	ListenerHandler.Init()
+
 	r.Route("/trade", func(r chi.Router) {
 		r.Get("/", TradeHandler.Get)
 		r.Delete("/", TradeHandler.DeleteAll)

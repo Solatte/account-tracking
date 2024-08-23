@@ -1,7 +1,9 @@
 package types
 
 type MySQLFilter struct {
-	Query []MySQLQuery
+	Query  []MySQLQuery `json:"query"`
+	Limit  int          `json:"limit"`
+	Offset int          `json:"offset"`
 }
 
 type MySQLQuery struct {

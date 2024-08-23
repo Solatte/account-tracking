@@ -76,6 +76,12 @@ func main() {
 		panic(err)
 	}
 
+	err = adapter.InitRedisClients(config.RedisAddr, config.RedisPassword)
+
+	if err != nil {
+		panic(err)
+	}
+
 	err = adapter.InitMySQLClient(config.MySqlDsn)
 
 	if err != nil {
