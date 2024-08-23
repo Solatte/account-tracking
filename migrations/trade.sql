@@ -11,6 +11,4 @@ CREATE TABLE IF NOT EXISTS trade (
     tip_amount INT,
     status VARCHAR(255),
     signer VARCHAR(255),
-	amm_id  VARCHAR(255),
-	mint VARCHAR(255)
 );
