@@ -10,5 +10,5 @@ CREATE TABLE IF NOT EXISTS trade (
     tip VARCHAR(255),
     tip_amount INT,
     status VARCHAR(255),
-    signer VARCHAR(255),
+    signer VARCHAR(255)
 );
